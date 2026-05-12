@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+    }
+  </style>
+</head>
+
+<body>
+  <script>
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const orderId =
+      params.get("order_id");
+
+    const amount =
+      params.get("amount");
+
+    const name =
+      params.get("name");
+
+    const email =
+      params.get("email");
+
+    const contact =
+      params.get("contact");
+
+    const customerId =
+      params.get(
+        "customer_id"
+      );
+
+    const options = {
+      key: "rzp_test_SmnjUGlaaU9Hsi",
+
+      amount: amount,
+
+      currency: "INR",
+
+      name: "DryDash",
+
+      description:
+        "Split Payment",
+
+      order_id: orderId,
+
+      customer_id:
+        customerId,
+
+      prefill: {
+        name: name,
+
+        email: email,
+
+        contact: contact,
+      },
+
+      readonly: {
+        contact: true,
+
+        email: true,
+
+        name: true,
+      },
+
+      hidden: {
+        contact: true,
+
+        email: true,
+      },
+
+      theme: {
+        color: "#111111",
+      },
+
+      config: {
+        display: {
+          blocks: {
+            banks: {
+              name:
+                "Pay using Cards",
+
+              instruments: [
+                {
+                  method:
+                    "card",
+                },
+              ],
+            },
+          },
+
+          sequence: [
+            "block.banks",
+          ],
+
+          preferences: {
+            show_default_blocks: false,
+          },
+        },
+      },
+
+      modal: {
+        escape: false,
+
+        backdropclose: false,
+
+        ondismiss: function () {
+          window.location.href =
+            "https://payment-cancelled";
+        },
+      },
+
+      handler: function (
+        response
+      ) {
+        window.location.href =
+          "https://payment-success";
+      },
+    };
+
+    const rzp =
+      new Razorpay(options);
+
+    window.onload =
+      function () {
+        rzp.open();
+      };
+  </script>
+</body>
+</html>
