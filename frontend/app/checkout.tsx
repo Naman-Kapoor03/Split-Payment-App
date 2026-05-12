@@ -9,19 +9,17 @@ import {
   StatusBar,
   Alert,
   ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 
 import * as Linking from "expo-linking";
 
-import PaymentCard from "../components/payment/PaymentCard";
-
-import paymentMethods from "../constants/paymentMethods";
-
 import { useRouter } from "expo-router";
 
-import { usePaymentStore } from "../store/payment.store";
-
 import api from "../services/api";
+
+import { usePaymentStore } from "../store/payment.store";
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -30,18 +28,61 @@ export default function CheckoutScreen() {
     useState(false);
 
   const [selectedMethod, setSelectedMethod] =
-    useState<string | null>(
-      null
-    );
+    useState<string | null>(null);
 
   const {
     amount,
     receiver,
-    receiverId,
     group,
     groupId,
+    receiverId,
     setPaymentData,
   } = usePaymentStore();
+
+  const paymentMethods = [
+    {
+      id: "gpay",
+      name: "Google Pay",
+      type: "upi",
+      icon: "🟢",
+    },
+
+    {
+      id: "phonepe",
+      name: "PhonePe",
+      type: "upi",
+      icon: "🟣",
+    },
+
+    {
+      id: "paytm",
+      name: "Paytm",
+      type: "upi",
+      icon: "🔵",
+    },
+
+    {
+      id: "card",
+      name:
+        "Credit / Debit Card",
+      type: "gateway",
+      icon: "💳",
+    },
+
+    {
+      id: "wallet",
+      name: "Wallets",
+      type: "gateway",
+      icon: "👛",
+    },
+
+    {
+      id: "netbanking",
+      name: "Net Banking",
+      type: "gateway",
+      icon: "🏦",
+    },
+  ];
 
   const handlePayment =
     async (method: any) => {
@@ -52,6 +93,19 @@ export default function CheckoutScreen() {
           method.id
         );
 
+        // CARD FLOW
+        if (
+          method.id ===
+          "card"
+        ) {
+          router.push(
+            "/card-payment"
+          );
+
+          return;
+        }
+
+        // CREATE PAYMENT
         const response =
           await api.post(
             "/payments",
@@ -68,96 +122,117 @@ export default function CheckoutScreen() {
           response.data.data
             .payment;
 
-        console.log(
-          "FULL PAYMENT:",
-          payment
-        );
+        const paymentLink =
+          response.data.data
+            .paymentLink;
 
-        const receiverUpiId =
-          payment.receiver
-            ?.upiId;
-
-        console.log(
-          "Receiver UPI:",
-          receiverUpiId
-        );
-
-        if (!receiverUpiId) {
-          Alert.alert(
-            "Error",
-            "Receiver UPI ID not found"
-          );
-
-          return;
-        }
+        const transactionId =
+          payment._id;
 
         setPaymentData({
+          amount,
+
+          receiver,
+
+          group,
+
           paymentMethod:
             method.name,
 
-          transactionId:
-            payment._id,
+          transactionId,
 
           paymentStatus:
-            "processing",
+            "pending",
+
+          paymentLink,
         });
 
-        const encodedReceiver =
-  encodeURIComponent(
-    receiver
-  );
-
-const upiUrls: Record<
-  string,
-  string
-> = {
-  gpay:
-    `upi://pay?pa=${receiverUpiId}&pn=${encodedReceiver}&am=${amount}&cu=INR`,
-
-  phonepe:
-    `phonepe://pay?pa=${receiverUpiId}&pn=${encodedReceiver}&am=${amount}&cu=INR`,
-
-  paytm:
-    `paytmmp://pay?pa=${receiverUpiId}&pn=${encodedReceiver}&am=${amount}&cu=INR`,
-};
+        // UPI FLOW
         if (
-          method.type === "upi"
+          method.type ===
+          "upi"
         ) {
+          const encodedReceiver =
+            encodeURIComponent(
+              receiver ||
+                "Receiver"
+            );
+
+          const note =
+            encodeURIComponent(
+              "Split Payment"
+            );
+
+          const transactionRef =
+            `TXN${Date.now()}`;
+
+          // STATIC UPI ID
+          const upiId =
+            "nk0030802@oksbi";
+
+          const commonParams =
+            `pa=${upiId}&pn=${encodedReceiver}&tn=${note}&tr=${transactionRef}&am=${amount}&cu=INR`;
+
+          const upiUrls: Record<
+            string,
+            string
+          > = {
+            gpay:
+              `tez://upi/pay?${commonParams}`,
+
+            phonepe:
+              `phonepe://upi/pay?${commonParams}`,
+
+            paytm:
+              `paytmmp://pay?${commonParams}`,
+          };
+
           const paymentUrl =
-            upiUrls[method.id];
+            upiUrls[
+              method.id
+            ];
 
           console.log(
-            "UPI URL:",
+            "Opening:",
             paymentUrl
           );
+
+          const supported =
+            await Linking.canOpenURL(
+              paymentUrl
+            );
+
+          if (
+            !supported
+          ) {
+            Alert.alert(
+              "Error",
+              `${method.name} is not installed`
+            );
+
+            return;
+          }
 
           router.push(
             "/processing"
           );
 
-          await Linking.openURL(
-            paymentUrl
+          setTimeout(
+            async () => {
+              await Linking.openURL(
+                paymentUrl
+              );
+            },
+            500
           );
+
+          return;
         }
 
-        if (
-          method.type === "card"
-        ) {
-          Alert.alert(
-            "Coming Soon",
-            "Card payments integration coming soon"
-          );
-        }
-
-        if (
-          method.type ===
-          "wallet"
-        ) {
-          Alert.alert(
-            "Coming Soon",
-            "Wallet integration coming soon"
-          );
-        }
+        // OTHER PAYMENT METHODS
+        router.push(
+          "/payment-webview"
+        );
       } catch (error: any) {
         console.log(
           "PAYMENT ERROR:",
@@ -174,7 +249,9 @@ const upiUrls: Record<
       } finally {
         setLoading(false);
 
-        setSelectedMethod(null);
+        setSelectedMethod(
+          null
+        );
       }
     };
 
@@ -190,109 +267,160 @@ const upiUrls: Record<
         }
       >
         <View style={styles.header}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>
-              Secure Checkout
-            </Text>
-          </View>
+          <Text style={styles.title}>
+            Complete Payment
+          </Text>
 
-          <Text style={styles.amount}>
+          <Text
+            style={styles.amount}
+          >
             ₹{amount}
           </Text>
 
-          <Text style={styles.subtitle}>
-            Choose payment method
+          <Text
+            style={
+              styles.subtitle
+            }
+          >
+            {group}
           </Text>
         </View>
 
-        <View style={styles.summary}>
-          <Text style={styles.summaryTitle}>
-            Payment Summary
-          </Text>
+        <Text style={styles.section}>
+          UPI Apps
+        </Text>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>
-              Group
-            </Text>
-
-            <Text style={styles.value}>
-              {group}
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.label}>
-              Amount
-            </Text>
-
-            <Text style={styles.value}>
-              ₹{amount}
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.label}>
-              Pay To
-            </Text>
-
-            <Text style={styles.value}>
-              {receiver}
-            </Text>
-          </View>
-        </View>
-
-        {paymentMethods.map(
-          (section) => (
-            <View
-              key={section.category}
+        {paymentMethods
+          .filter(
+            (item) =>
+              item.type ===
+              "upi"
+          )
+          .map((method) => (
+            <TouchableOpacity
+              key={method.id}
+              style={
+                styles.card
+              }
+              onPress={() =>
+                handlePayment(
+                  method
+                )
+              }
+              disabled={loading}
             >
-              <Text
+              <View
                 style={
-                  styles.sectionTitle
+                  styles.left
                 }
               >
-                {section.category}
-              </Text>
+                <Text
+                  style={
+                    styles.icon
+                  }
+                >
+                  {
+                    method.icon
+                  }
+                </Text>
 
-              {section.methods.map(
-                (method) => (
-                  <PaymentCard
-                    key={method.id}
-                    name={method.name}
-                    subtitle={
-                      method.subtitle
-                    }
-                    color={
-                      method.color
-                    }
-                    bgColor={
-                      method.bgColor
-                    }
-                    logo={method.logo}
-                    loading={
-                      loading &&
-                      selectedMethod ===
-                        method.id
-                    }
-                    selected={
-                      selectedMethod ===
-                      method.id
-                    }
-                    onPress={() =>
-                      handlePayment(
-                        method
-                      )
-                    }
-                  />
-                )
+                <Text
+                  style={
+                    styles.methodName
+                  }
+                >
+                  {
+                    method.name
+                  }
+                </Text>
+              </View>
+
+              {loading &&
+              selectedMethod ===
+                method.id ? (
+                <ActivityIndicator />
+              ) : (
+                <Text
+                  style={
+                    styles.arrow
+                  }
+                >
+                  →
+                </Text>
               )}
-            </View>
+            </TouchableOpacity>
+          ))}
+
+        <Text style={styles.section}>
+          Other Payment Options
+        </Text>
+
+        {paymentMethods
+          .filter(
+            (item) =>
+              item.type ===
+              "gateway"
           )
-        )}
+          .map((method) => (
+            <TouchableOpacity
+              key={method.id}
+              style={
+                styles.card
+              }
+              onPress={() =>
+                handlePayment(
+                  method
+                )
+              }
+              disabled={loading}
+            >
+              <View
+                style={
+                  styles.left
+                }
+              >
+                <Text
+                  style={
+                    styles.icon
+                  }
+                >
+                  {
+                    method.icon
+                  }
+                </Text>
+
+                <Text
+                  style={
+                    styles.methodName
+                  }
+                >
+                  {
+                    method.name
+                  }
+                </Text>
+              </View>
+
+              {loading &&
+              selectedMethod ===
+                method.id ? (
+                <ActivityIndicator />
+              ) : (
+                <Text
+                  style={
+                    styles.arrow
+                  }
+                >
+                  →
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))}
 
         <View style={styles.footer}>
           <Text
-            style={styles.footerText}
+            style={
+              styles.footerText
+            }
           >
             🔒 100% Secure Payments
           </Text>
@@ -302,92 +430,89 @@ const upiUrls: Record<
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FAFAFA",
-    paddingHorizontal: 22,
-    paddingTop: 60,
-  },
+const styles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor:
+        "#FAFAFA",
+      paddingHorizontal: 22,
+      paddingTop: 60,
+    },
 
-  header: {
-    alignItems: "center",
-    marginBottom: 34,
-  },
+    header: {
+      alignItems: "center",
+      marginBottom: 34,
+    },
 
-  badge: {
-    backgroundColor: "#EFEFEF",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    marginBottom: 16,
-  },
+    title: {
+      fontSize: 34,
+      fontWeight: "700",
+      color: "#111",
+    },
 
-  badgeText: {
-    fontSize: 12,
-    color: "#777",
-    fontWeight: "600",
-  },
+    amount: {
+      fontSize: 48,
+      fontWeight: "700",
+      color: "#111",
+      marginTop: 12,
+    },
 
-  amount: {
-    fontSize: 48,
-    fontWeight: "700",
-    color: "#111",
-    marginBottom: 6,
-  },
+    subtitle: {
+      fontSize: 15,
+      color: "#888",
+      marginTop: 6,
+    },
 
-  subtitle: {
-    fontSize: 15,
-    color: "#888",
-  },
+    section: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: "#111",
+      marginBottom: 16,
+      marginTop: 10,
+    },
 
-  summary: {
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    padding: 20,
-    marginBottom: 28,
-  },
+    card: {
+      backgroundColor:
+        "#fff",
+      borderRadius: 22,
+      padding: 20,
+      marginBottom: 16,
+      flexDirection: "row",
+      justifyContent:
+        "space-between",
+      alignItems: "center",
+    },
 
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 18,
-  },
+    left: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
 
-  row: {
-    flexDirection: "row",
-    justifyContent:
-      "space-between",
-    marginBottom: 14,
-  },
+    icon: {
+      fontSize: 28,
+      marginRight: 16,
+    },
 
-  label: {
-    fontSize: 15,
-    color: "#777",
-  },
+    methodName: {
+      fontSize: 17,
+      fontWeight: "600",
+      color: "#111",
+    },
 
-  value: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111",
-  },
+    arrow: {
+      fontSize: 22,
+      color: "#999",
+    },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111",
-    marginBottom: 16,
-    marginTop: 10,
-  },
+    footer: {
+      alignItems: "center",
+      marginTop: 30,
+      marginBottom: 40,
+    },
 
-  footer: {
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 40,
-  },
-
-  footerText: {
-    color: "#AAA",
-    fontSize: 13,
-  },
-});
+    footerText: {
+      color: "#777",
+      fontSize: 14,
+    },
+  });

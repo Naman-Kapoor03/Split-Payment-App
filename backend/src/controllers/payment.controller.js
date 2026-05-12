@@ -28,37 +28,49 @@ const createSettlement =
         });
       }
 
-      const paymentLink =
-        await razorpay.paymentLink.create(
+      // EXISTING CUSTOMER CHECK
+      let customerId =
+        req.user
+          .razorpayCustomerId;
+
+      // CREATE CUSTOMER IF NOT EXISTS
+      if (!customerId) {
+        const customer =
+          await razorpay.customers.create(
+            {
+              name:
+                req.user.name,
+
+              email:
+                req.user.email,
+
+              contact:
+                req.user.phone ||
+                "9876543210",
+            }
+          );
+
+        customerId =
+          customer.id;
+
+        await User.findByIdAndUpdate(
+          req.user._id,
+          {
+            razorpayCustomerId:
+              customerId,
+          }
+        );
+      }
+
+      const razorpayOrder =
+        await razorpay.orders.create(
           {
             amount:
               amount * 100,
 
             currency: "INR",
 
-            accept_partial: false,
-
-            description:
-              "Split Payment",
-
-            customer: {
-              name: req.user.name,
-              email:
-                req.user.email,
-            },
-
-            notify: {
-              sms: false,
-              email: false,
-            },
-
-            reminder_enable: false,
-
-            callback_url:
-              "https://example.com/payment-success",
-
-            callback_method:
-              "get",
+            receipt: `receipt_${Date.now()}`,
           }
         );
 
@@ -75,9 +87,7 @@ const createSettlement =
           status: "pending",
 
           razorpayOrderId:
-            paymentLink
-              .reference_id ||
-            paymentLink.id,
+            razorpayOrder.id,
         });
 
       const populatedPayment =
@@ -97,23 +107,30 @@ const createSettlement =
             "name"
           );
 
+      const paymentPageUrl =
+        `https://payment-page-weld.vercel.app/?order_id=${razorpayOrder.id}&amount=${amount * 100}&name=${encodeURIComponent(req.user.name)}&email=${encodeURIComponent(req.user.email)}&contact=${encodeURIComponent(req.user.phone || "9876543210")}&customer_id=${customerId}`;
+
       res.status(201).json({
         success: true,
 
         message:
-          "Payment link created successfully",
+          "Order created successfully",
 
         data: {
           payment:
             populatedPayment,
 
           paymentLink:
-            paymentLink.short_url,
+            paymentPageUrl,
+
+          orderId:
+            razorpayOrder.id,
         },
       });
     } catch (error) {
       res.status(500).json({
         success: false,
+
         message:
           error.message,
       });
@@ -164,6 +181,7 @@ const getMyPayments =
     } catch (error) {
       res.status(500).json({
         success: false,
+
         message:
           error.message,
       });
@@ -193,6 +211,7 @@ const getPaymentById =
       if (!payment) {
         return res.status(404).json({
           success: false,
+
           message:
             "Payment not found",
         });
@@ -200,11 +219,13 @@ const getPaymentById =
 
       res.status(200).json({
         success: true,
+
         data: payment,
       });
     } catch (error) {
       res.status(500).json({
         success: false,
+
         message:
           error.message,
       });
@@ -239,6 +260,7 @@ const razorpayWebhook =
       ) {
         return res.status(400).json({
           success: false,
+
           message:
             "Invalid webhook signature",
         });
@@ -255,10 +277,14 @@ const razorpayWebhook =
           req.body.payload
             .payment.entity.id;
 
+        const razorpayOrderId =
+          req.body.payload
+            .payment.entity.order_id;
+
         const payment =
           await Payment.findOne({
-            status:
-              "pending",
+            razorpayOrderId:
+              razorpayOrderId,
           });
 
         if (payment) {
@@ -278,6 +304,7 @@ const razorpayWebhook =
     } catch (error) {
       res.status(500).json({
         success: false,
+
         message:
           error.message,
       });

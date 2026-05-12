@@ -17,6 +17,8 @@ type PaymentStore = {
 
   paymentStatus: string;
 
+  paymentLink: string;
+
   setPaymentData: (
     data: Partial<PaymentStore>
   ) => void;
@@ -42,6 +44,8 @@ export const usePaymentStore =
 
     paymentStatus: "",
 
+    paymentLink: "",
+
     setPaymentData: (data) =>
       set((state) => ({
         ...state,
@@ -65,5 +69,7 @@ export const usePaymentStore =
         transactionId: "",
 
         paymentStatus: "",
+
+        paymentLink: "",
       }),
   }));

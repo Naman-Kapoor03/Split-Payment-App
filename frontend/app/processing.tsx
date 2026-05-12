@@ -26,7 +26,7 @@ export default function ProcessingScreen() {
 
   const [statusText, setStatusText] =
     useState(
-      "Waiting for payment confirmation"
+      "Waiting for bank confirmation..."
     );
 
   const pulseAnim = useRef(
@@ -79,6 +79,10 @@ export default function ProcessingScreen() {
           console.log(
             "Attempts:",
             attemptsRef.current
+          );
+
+          setStatusText(
+            `Verifying payment... (${attemptsRef.current})`
           );
 
           const response =
@@ -174,7 +178,7 @@ export default function ProcessingScreen() {
 
           if (
             attemptsRef.current >=
-            5
+            30
           ) {
             clearInterval(
               pollPayment

@@ -19,7 +19,17 @@ const userSchema =
         required: true,
       },
 
+      phone: {
+        type: String,
+        default: "",
+      },
+
       upiId: {
+        type: String,
+        default: "",
+      },
+
+      razorpayCustomerId: {
         type: String,
         default: "",
       },
